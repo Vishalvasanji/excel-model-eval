@@ -1,0 +1,159 @@
+{
+ "schema_version": 1,
+ "note": "Rent limits and utility allowances are market-specific and must come from the issuing authority. Only markets present here can be screened without supplying tables on the deal itself.",
+ "tdc_limits": {
+  "regions": {
+   "New Orleans": {
+    "source": "Source: HUD FY2025 MTSP Income Limits (Orleans Parish)",
+    "source_note": "Source: HUD FY2024 Unit TDC Limits, Region VI \u2013 Midsouth, New Orleans row (hud.gov)",
+    "limits": {
+     "0": {
+      "Detached/Semi-Detached": 199618,
+      "Row House": 172976,
+      "Walk-up": 156737,
+      "Elevator": 161035
+     },
+     "1": {
+      "Detached/Semi-Detached": 258890,
+      "Row House": 227077,
+      "Walk-up": 213098,
+      "Elevator": 225448
+     },
+     "2": {
+      "Detached/Semi-Detached": 310326,
+      "Row House": 276477,
+      "Walk-up": 269309,
+      "Elevator": 289862
+     },
+     "3": {
+      "Detached/Semi-Detached": 370970,
+      "Row House": 339946,
+      "Walk-up": 354388,
+      "Elevator": 386483
+     },
+     "4": {
+      "Detached/Semi-Detached": 437537,
+      "Row House": 404791,
+      "Walk-up": 438588,
+      "Elevator": 483104
+     }
+    }
+   }
+  }
+ },
+ "markets": {
+  "new-orleans-la": {
+   "name": "New Orleans-Metairie, LA HUD Metro FMR Area",
+   "state": "LA",
+   "coastal": true,
+   "tdc_region": "New Orleans",
+   "aliases": [
+    "new orleans",
+    "metairie",
+    "kenner",
+    "gretna",
+    "chalmette",
+    "orleans",
+    "orleans parish",
+    "jefferson parish",
+    "st. bernard parish",
+    "new orleans-metairie",
+    "new orleans, la"
+   ],
+   "rent_limits": {
+    "source": "Source: HUD FY2025 MTSP Income Limits (Orleans Parish)",
+    "title": "2025 New Orleans-Metairie MSA Gross Rent Limits",
+    "table": {
+     "1.20": [
+      1887,
+      2022,
+      2427,
+      2802,
+      3126
+     ],
+     "0.20": [
+      314,
+      337,
+      404,
+      467,
+      521
+     ],
+     "0.30": [
+      471,
+      498,
+      598,
+      691,
+      781
+     ],
+     "0.40": [
+      629,
+      674,
+      809,
+      934,
+      1042
+     ],
+     "0.50": [
+      786,
+      831,
+      997,
+      1151,
+      1302
+     ],
+     "0.60": [
+      943,
+      997,
+      1197,
+      1382,
+      1563
+     ],
+     "0.70": [
+      1100,
+      1163,
+      1396,
+      1612,
+      1823
+     ],
+     "0.80": [
+      1258,
+      1348,
+      1618,
+      1868,
+      2084
+     ]
+    }
+   },
+   "utility_allowances": {
+    "source": "Source: HANO Utility Allowance Schedule, eff. 09/01/2025 (Apartment, all-electric)",
+    "title": "New Orleans Utility Allowances",
+    "electricity": [
+     57,
+     67,
+     89,
+     111,
+     134
+    ],
+    "water": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "sewer": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "trash": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}
