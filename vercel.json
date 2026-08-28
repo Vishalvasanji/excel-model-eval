@@ -2,10 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.py": {
-      "runtime": "python3.12",
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "lihtc_screen/**"
+      "excludeFiles": "{tests/**,tools/**,reference/**,skills/**,**/test_*.py}"
     }
   },
   "rewrites": [
