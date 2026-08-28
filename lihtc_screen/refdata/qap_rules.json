@@ -1,0 +1,905 @@
+{
+ "qap_basis": "Louisiana 2025 QAP",
+ "rules": [
+  {
+   "rule_id": "ELG-9PCT-BOND",
+   "group": "Credit Structure",
+   "metric": "9% credit + tax-exempt bonds",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "eq",
+   "threshold_value": 0,
+   "threshold_text": "Mutually exclusive",
+   "pass_logic": "IF CreditType=9% then 'Sources & Uses'!I12 = 0",
+   "model_cells": "Sources & Uses'!I12",
+   "dashboard_kpi_id": "ELG-9PCT-BOND",
+   "citation": "QAP \u00a7II \u00b7 IRC \u00a742(h)(4)",
+   "notes": "Evaluated only when 9% competitive; N/A for 4% bond."
+  },
+  {
+   "rule_id": "ELG-4PCT-BOND",
+   "group": "Credit Structure",
+   "metric": "4% credit requires bonds",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "gt",
+   "threshold_value": 0,
+   "threshold_text": "Bonds required",
+   "pass_logic": "IF CreditType=4% then 'Sources & Uses'!I12 > 0",
+   "model_cells": "Sources & Uses'!I12",
+   "dashboard_kpi_id": "ELG-4PCT-BOND",
+   "citation": "QAP \u00a7II \u00b7 IRC \u00a742(h)(4)",
+   "notes": "Westbend I12=$30.19M > 0."
+  },
+  {
+   "rule_id": "ELG-POOL-CAP",
+   "group": "Credit Sizing",
+   "metric": "Per-project LIHTC pool cap",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": null,
+   "threshold_text": "$1.0M rural / $1.5M metro / $1.0M rural QNP-CHDO / uncapped reprocessing",
+   "pass_logic": "IF 9%: 'Tax Credit Calc'!F21 <= pool cap (by pool toggle); 4% -> N/A",
+   "model_cells": "Tax Credit Calc'!F21",
+   "dashboard_kpi_id": "ELG-POOL-CAP",
+   "citation": "QAP \u00a7II.B.1",
+   "notes": "Cap toggle-dependent (see params). N/A for 4% bond (draws PAB volume cap)."
+  },
+  {
+   "rule_id": "ELG-CREDIT-MAX",
+   "group": "Credit Sizing",
+   "metric": "Maximum allowable credit",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": null,
+   "threshold_text": "MIN(basis method, equity-gap method)",
+   "pass_logic": "Tax Credit Calc'!F21 <= MIN(basis credit, gap credit)",
+   "model_cells": "Tax Credit Calc'!F21",
+   "dashboard_kpi_id": "ELG-CREDIT-MAX",
+   "citation": "QAP \u00a7II.B \u00b7 \u00a7IV.D",
+   "notes": "Gap credit = (TDC-debt-soft-deferred)/price/10 / LP-fraction. Assumption flagged."
+  },
+  {
+   "rule_id": "ELG-BOOST-30",
+   "group": "Credit Sizing",
+   "metric": "Construction basis boost cap",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.3,
+   "threshold_text": "<= 30%",
+   "pass_logic": "Tax Credit Calc'!F16 <= 30%",
+   "model_cells": "Tax Credit Calc'!F16",
+   "dashboard_kpi_id": "ELG-BOOST-30",
+   "citation": "QAP \u00a7II.C",
+   "notes": "Westbend boost F16 = 0%."
+  },
+  {
+   "rule_id": "ELG-BOOST-ELIGIBILITY",
+   "group": "Credit Sizing",
+   "metric": "Basis boost geographic eligibility",
+   "category": "eligibility",
+   "severity": "warning",
+   "scope": "INPUT",
+   "operator": "info",
+   "threshold_value": null,
+   "threshold_text": "Qualifying geography required",
+   "pass_logic": "IF boost claimed: geography eligible (input M6)",
+   "model_cells": "Dashboard input M6",
+   "dashboard_kpi_id": "ELG-BOOST-ELIGIBILITY",
+   "citation": "QAP \u00a7II.C",
+   "notes": "QCT/DDA/Tribal/disaster/FFIEC (9%); QCT or DDA only (bond). Needs input M6."
+  },
+  {
+   "rule_id": "ELG-EQUITY-MATCH",
+   "group": "Credit Structure",
+   "metric": "LIHTC equity reconciliation",
+   "category": "eligibility",
+   "severity": "error",
+   "scope": "APP-SIDE",
+   "operator": "info",
+   "threshold_value": null,
+   "threshold_text": "Must match",
+   "pass_logic": "\u00a718.10 LIHTC equity = syndication gross equity (app-form)",
+   "model_cells": "(application form)",
+   "dashboard_kpi_id": "ELG-EQUITY-MATCH",
+   "citation": "QAP \u00a7IV.D.2",
+   "notes": "App-side: needs \u00a718.10 equity field. Excluded from verdict rollup."
+  },
+  {
+   "rule_id": "UW-DSCR-Y1",
+   "group": "DSCR",
+   "metric": "Annual DSCR band (house rule, all yrs)",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "between",
+   "threshold_value": null,
+   "threshold_text": "1.15 \u2013 1.40",
+   "pass_logic": "MIN(DSCR Yr2-17) >= 1.15 AND MAX <= 1.40",
+   "model_cells": "17-year Pro Forma'! row26 / (row30+row31), cols E:T",
+   "dashboard_kpi_id": "DSCR-GATE",
+   "citation": "QAP \u00a7IV.D.6",
+   "notes": "Primary gate. Numerator = NOI before repl reserves. Yr1 excluded (lease-up). DSCR floor is a house rule."
+  },
+  {
+   "rule_id": "UW-DSCR-15",
+   "group": "DSCR",
+   "metric": "15-year projected DSCR (QAP spot)",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "between",
+   "threshold_value": null,
+   "threshold_text": "1.00 \u2013 1.40",
+   "pass_logic": "1.00 <= DSCR <= 1.40 at Yr5/10/15",
+   "model_cells": "17-year Pro Forma'! row26/(row30+row31) cols H,M,R",
+   "dashboard_kpi_id": "DSCR-GATE",
+   "citation": "QAP \u00a7IV.D.6",
+   "notes": "QAP spot-check subset of the annual gate."
+  },
+  {
+   "rule_id": "FEE-DEVELOPER",
+   "group": "Fee Limits",
+   "metric": "Developer fee",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": null,
+   "threshold_text": "MIN($2.0M, 15% of base); no cap for 4% bond",
+   "pass_logic": "IF 4% bond: PASS (no cap); else I66 <= MIN(2,000,000, 15%*I83)",
+   "model_cells": "Sources & Uses'!I66 (base I83)",
+   "dashboard_kpi_id": "FEE-DEVELOPER",
+   "citation": "QAP \u00a7IV.D.18",
+   "notes": "Replaces model placeholder I84 ($9,999,999). Westbend 4% bond -> no cap."
+  },
+  {
+   "rule_id": "FEE-ARCHITECT",
+   "group": "Fee Limits",
+   "metric": "Architect / build-design fee",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.07,
+   "threshold_text": "<= 7% of construction contract",
+   "pass_logic": "Sources & Uses'!I46 <= 7% * I43",
+   "model_cells": "Sources & Uses'!I46 (contract I43)",
+   "dashboard_kpi_id": "FEE-ARCHITECT",
+   "citation": "QAP \u00a7IV.D.19",
+   "notes": "Construction contract = Total Hard Costs I43 (assumption)."
+  },
+  {
+   "rule_id": "FEE-BUILDER-PROFIT",
+   "group": "Fee Limits",
+   "metric": "Builder profit",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.06,
+   "threshold_text": "<= 6% of builder-profit base",
+   "pass_logic": "Sources & Uses'!I40 <= 6% * I82",
+   "model_cells": "Sources & Uses'!I40 (base I82)",
+   "dashboard_kpi_id": "FEE-BUILDER-PROFIT",
+   "citation": "QAP \u00a7IV.D.20",
+   "notes": "Westbend exactly at 6% cap (zero cushion)."
+  },
+  {
+   "rule_id": "FEE-BUILDER-OVERHEAD",
+   "group": "Fee Limits",
+   "metric": "Builder overhead",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.02,
+   "threshold_text": "<= 2% of builder-profit base",
+   "pass_logic": "Sources & Uses'!I39 <= 2% * I82",
+   "model_cells": "Sources & Uses'!I39 (base I82)",
+   "dashboard_kpi_id": "FEE-BUILDER-OVERHEAD",
+   "citation": "QAP \u00a7IV.D.21",
+   "notes": "Exactly at 2% cap."
+  },
+  {
+   "rule_id": "FEE-GENERAL-REQUIREMENTS",
+   "group": "Fee Limits",
+   "metric": "General requirements",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.06,
+   "threshold_text": "<= 6% of builder-profit base",
+   "pass_logic": "Sources & Uses'!I38 <= 6% * I82",
+   "model_cells": "Sources & Uses'!I38 (base I82)",
+   "dashboard_kpi_id": "FEE-GENERAL-REQUIREMENTS",
+   "citation": "QAP \u00a7IV.D.23",
+   "notes": "Exactly at 6% cap."
+  },
+  {
+   "rule_id": "FEE-CONTINGENCY",
+   "group": "Fee Limits",
+   "metric": "Construction contingency",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.1,
+   "threshold_text": "<= 10% of construction contract",
+   "pass_logic": "Sources & Uses'!I41 <= 10% * I43",
+   "model_cells": "Sources & Uses'!I41 (contract I43)",
+   "dashboard_kpi_id": "FEE-CONTINGENCY",
+   "citation": "QAP \u00a7IV.D",
+   "notes": "Westbend ~4.8% <= 10%."
+  },
+  {
+   "rule_id": "UW-OPEX-MIN",
+   "group": "Operating & Reserves",
+   "metric": "Minimum operating expenses",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": 4500,
+   "threshold_text": ">= $4,500 per unit per year",
+   "pass_logic": "17-year Pro Forma'!E24 >= 4500 * units",
+   "model_cells": "17-year Pro Forma'!E24; Units",
+   "dashboard_kpi_id": "UW-OPEX-MIN",
+   "citation": "QAP \u00a7IV.D.13",
+   "notes": "Units = 'Unit Mix+Rents'!D15 = 280."
+  },
+  {
+   "rule_id": "UW-OPERATING-RESERVE-6MO",
+   "group": "Operating & Reserves",
+   "metric": "Operating reserve minimum",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": 0.5,
+   "threshold_text": ">= 6 months (0.5x annual opex)",
+   "pass_logic": "Sources & Uses'!I68 >= 0.5 * 'PF'!E24",
+   "model_cells": "Sources & Uses'!I68; 'PF'!E24",
+   "dashboard_kpi_id": "UW-OPERATING-RESERVE-6MO",
+   "citation": "QAP \u00a7IV.D.14",
+   "notes": "6-mo = half of annual stabilized opex."
+  },
+  {
+   "rule_id": "FEE-ASSET-MGMT-CAP",
+   "group": "Operating & Reserves",
+   "metric": "Asset-management fee cap (opex)",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "APP-SIDE",
+   "operator": "lte",
+   "threshold_value": 5000,
+   "threshold_text": "<= $5,000 / year",
+   "pass_logic": "Combined AM fee in OPEX <= $5,000/yr",
+   "model_cells": "(no AM line inside opex)",
+   "dashboard_kpi_id": "FEE-ASSET-MGMT-CAP",
+   "citation": "QAP \u00a7IV.D.3 \u00b7 \u00a744",
+   "notes": "N/A: Westbend opex has no AM line. PF row38 AM fee is a below-NOI partnership fee, NOT opex. Excluded from rollup."
+  },
+  {
+   "rule_id": "UW-RESERVE-PUPA",
+   "group": "Operating & Reserves",
+   "metric": "Replacement-reserve deposit minimum",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": null,
+   "threshold_text": "$300 senior / $350 family / $500 rehab per unit/yr",
+   "pass_logic": "17-year Pro Forma'!D28 / units >= project-type floor",
+   "model_cells": "17-year Pro Forma'!D28; Units",
+   "dashboard_kpi_id": "UW-RESERVE-PUPA",
+   "citation": "QAP \u00a7IV.D.10",
+   "notes": "Floor toggle-dependent (params). Westbend $350/unit = Family floor."
+  },
+  {
+   "rule_id": "UW-RESERVE-ADEQUACY",
+   "group": "Operating & Reserves",
+   "metric": "Replacement-reserve adequacy",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": null,
+   "threshold_text": ">= per-unit min balance every year",
+   "pass_logic": "Cumulative repl-reserve balance >= per-unit min every yr",
+   "model_cells": "17-year Pro Forma'! row28 cumulative",
+   "dashboard_kpi_id": "UW-RESERVE-ADEQUACY",
+   "citation": "QAP \u00a7IV.D.10",
+   "notes": "Helper: cumulative deposits vs floor*units each year."
+  },
+  {
+   "rule_id": "UW-VACANCY13",
+   "group": "Vacancy & Trending",
+   "metric": "Vacancy, years 1-3",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": 0.07,
+   "threshold_text": ">= 7% (normal market)",
+   "pass_logic": "Rev+Expenses'!D30 >= 7%",
+   "model_cells": "Rev+Expenses'!D30",
+   "dashboard_kpi_id": "UW-VACANCY13",
+   "citation": "QAP \u00a7IV.D.5",
+   "notes": "Westbend 7%."
+  },
+  {
+   "rule_id": "UW-VACANCY4",
+   "group": "Vacancy & Trending",
+   "metric": "Vacancy, years 4+",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": 0.07,
+   "threshold_text": ">= 7% (normal market)",
+   "pass_logic": "Rev+Expenses'!D30 >= 7%",
+   "model_cells": "Rev+Expenses'!D30",
+   "dashboard_kpi_id": "UW-VACANCY4",
+   "citation": "QAP \u00a7IV.D.5",
+   "notes": "Same vacancy assumption Yr4+."
+  },
+  {
+   "rule_id": "UW-TREND-RENT13",
+   "group": "Vacancy & Trending",
+   "metric": "Rent inflation, years 1-3",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.02,
+   "threshold_text": "<= 2.0% (LHC standard)",
+   "pass_logic": "17-year Pro Forma'!E6/D6-1 <= 2.0%",
+   "model_cells": "17-year Pro Forma'! row6 YoY / D48",
+   "dashboard_kpi_id": "UW-TREND-RENT13",
+   "citation": "QAP \u00a7IV.D.4",
+   "notes": "Revenue growth D48 = 2%."
+  },
+  {
+   "rule_id": "UW-TREND-RENT415",
+   "group": "Vacancy & Trending",
+   "metric": "Rent inflation, years 4-15",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.02,
+   "threshold_text": "<= 2.0% (LHC standard)",
+   "pass_logic": "PF row6 YoY <= 2.0%",
+   "model_cells": "17-year Pro Forma'! row6 YoY / D48",
+   "dashboard_kpi_id": "UW-TREND-RENT415",
+   "citation": "QAP \u00a7IV.D.4",
+   "notes": "Same 2% trend Yr4-15."
+  },
+  {
+   "rule_id": "UW-TREND-EXPENSE",
+   "group": "Vacancy & Trending",
+   "metric": "Expense inflation",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": 0.028,
+   "threshold_text": ">= 2.8% (LHC standard)",
+   "pass_logic": "PF expense growth D49 >= 2.8%",
+   "model_cells": "17-year Pro Forma'!D49",
+   "dashboard_kpi_id": "UW-TREND-EXPENSE",
+   "citation": "QAP \u00a7IV.D.4",
+   "notes": "Expense growth D49 = 3%."
+  },
+  {
+   "rule_id": "UW-HUD-TDC",
+   "group": "Cost & TDC",
+   "metric": "HUD Total Development Cost limit",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "INPUT",
+   "operator": "lte",
+   "threshold_value": null,
+   "threshold_text": "<= 100% of HUD per-unit TDC limit (summed)",
+   "pass_logic": "Adjusted TDC 'Sources & Uses'!I79 <= HUD limit (input M10)",
+   "model_cells": "Sources & Uses'!I79; input M10",
+   "dashboard_kpi_id": "UW-HUD-TDC",
+   "citation": "QAP \u00a7IV.D.25",
+   "notes": "Model I86 ($287,704) is a QAP figure, NOT the HUD limit. Enter M10 per deal."
+  },
+  {
+   "rule_id": "UW-SOURCES-USES",
+   "group": "Cost & TDC",
+   "metric": "Sources & Uses balance",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "eq",
+   "threshold_value": 1,
+   "threshold_text": "Sources = Uses (to $1)",
+   "pass_logic": "ABS('Sources & Uses'!I81) <= 1",
+   "model_cells": "Sources & Uses'!I81",
+   "dashboard_kpi_id": "UW-SOURCES-USES",
+   "citation": "QAP \u00a7IV.D.2",
+   "notes": "Westbend balance ~$0."
+  },
+  {
+   "rule_id": "UW-BASIS-RECON",
+   "group": "Cost & TDC",
+   "metric": "Eligible-basis reconciliation",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "APP-SIDE",
+   "operator": "info",
+   "threshold_value": null,
+   "threshold_text": "No reconciliation errors",
+   "pass_logic": "Eligible-basis config reconciles with unit-mix (app-form)",
+   "model_cells": "(application form)",
+   "dashboard_kpi_id": "UW-BASIS-RECON",
+   "citation": "IRC \u00a742(d)",
+   "notes": "App-side: needs eligible-basis config. Excluded from rollup."
+  },
+  {
+   "rule_id": "UW-SYND-COSTCAP",
+   "group": "Syndication",
+   "metric": "Syndication cost cap",
+   "category": "underwriting",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": null,
+   "threshold_text": "<= 10% private / 15% public of proceeds",
+   "pass_logic": "Financing Assumptions'!D49 <= rate * 'Tax Credit Calc'!F40",
+   "model_cells": "Financing Assumptions'!D49; 'Tax Credit Calc'!F40",
+   "dashboard_kpi_id": "UW-SYND-COSTCAP",
+   "citation": "QAP \u00a7IV.D.24",
+   "notes": "Rate by offering toggle (M8). Westbend $50K << 10%*$15.19M."
+  },
+  {
+   "rule_id": "UW-SYND-PARTVI",
+   "group": "Syndication",
+   "metric": "Syndication cost reconciliation",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "APP-SIDE",
+   "operator": "info",
+   "threshold_value": null,
+   "threshold_text": "Part VI = Dev Costs syndication total",
+   "pass_logic": "Part VI syndication = Dev Costs syndication subtotal (app-form)",
+   "model_cells": "(application form)",
+   "dashboard_kpi_id": "UW-SYND-PARTVI",
+   "citation": "QAP \u00a7IV.D.24",
+   "notes": "App-side: needs Part VI form. Excluded from rollup."
+  },
+  {
+   "rule_id": "UW-CASHFLOW-10PCT",
+   "group": "Cash Flow",
+   "metric": "Year-1 cash flow ceiling",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "lte",
+   "threshold_value": 0.1,
+   "threshold_text": "<= 10% of operating expenses",
+   "pass_logic": "Stabilized cash 'PF'!E40 <= 10% * 'PF'!E24",
+   "model_cells": "17-year Pro Forma'!E40; E24",
+   "dashboard_kpi_id": "UW-CASHFLOW-10PCT",
+   "citation": "QAP \u00a7IV.D.4",
+   "notes": "Stabilized (Yr2) cash vs 10% of opex."
+  },
+  {
+   "rule_id": "UW-DEFERRED-DEV-FEE-15YR",
+   "group": "Deferred Developer Fee",
+   "metric": "Deferred developer fee payoff",
+   "category": "underwriting",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "operator": "gte",
+   "threshold_value": null,
+   "threshold_text": "Fully repaid by year 15",
+   "pass_logic": "Cumulative 'PF'! row40 (Yr2->) at Yr15 >= deferred fee (input M11)",
+   "model_cells": "17-year Pro Forma'! row40 cumulative; input M11",
+   "dashboard_kpi_id": "UW-DEF-FEE",
+   "citation": "QAP \u00a7IV.D.3 \u00b7 \u00a7IV.D.9",
+   "notes": "Source = PF row40 cumulative (waterfall is a stub - not used). Default deferred fee = 'Sources & Uses'!I22."
+  }
+ ],
+ "parameters": {
+  "reserve_floor_senior": {
+   "label": "Replacement reserve floor \u2014 Senior ($/unit/yr)",
+   "value": 300
+  },
+  "reserve_floor_family": {
+   "label": "Replacement reserve floor \u2014 Family ($/unit/yr)",
+   "value": 350
+  },
+  "reserve_floor_rehab": {
+   "label": "Replacement reserve floor \u2014 Rehab ($/unit/yr)",
+   "value": 500
+  },
+  "pool_cap_metro": {
+   "label": "Pool cap \u2014 Metro ($)",
+   "value": 1500000
+  },
+  "pool_cap_rural": {
+   "label": "Pool cap \u2014 Rural ($)",
+   "value": 1000000
+  },
+  "pool_cap_rural_qnp": {
+   "label": "Pool cap \u2014 Rural QNP-CHDO ($)",
+   "value": 1000000
+  },
+  "pool_cap_reprocessing": {
+   "label": "Pool cap \u2014 Reprocessing (uncapped)",
+   "value": 1000000000000
+  },
+  "developer_fee_cap_abs": {
+   "label": "Developer fee cap \u2014 absolute ($)",
+   "value": 2000000
+  },
+  "developer_fee_cap_pct": {
+   "label": "Developer fee cap \u2014 % of dev fee base",
+   "value": 0.15
+  },
+  "syndication_cap_private": {
+   "label": "Syndication cost cap \u2014 Private (% proceeds)",
+   "value": 0.1
+  },
+  "syndication_cap_public": {
+   "label": "Syndication cost cap \u2014 Public (% proceeds)",
+   "value": 0.15
+  },
+  "dscr_floor": {
+   "label": "DSCR floor \u2014 house rule",
+   "value": 1.15
+  },
+  "dscr_ceiling": {
+   "label": "DSCR ceiling \u2014 QAP",
+   "value": 1.4
+  },
+  "dscr_15yr_floor": {
+   "label": "DSCR 15-yr floor \u2014 QAP",
+   "value": 1
+  },
+  "arch_pct": {
+   "label": "Architect / build-design fee",
+   "value": 0.07
+  },
+  "builder_profit_pct": {
+   "label": "Builder profit",
+   "value": 0.06
+  },
+  "builder_oh_pct": {
+   "label": "Builder overhead",
+   "value": 0.02
+  },
+  "gen_req_pct": {
+   "label": "General requirements",
+   "value": 0.06
+  },
+  "contingency_pct": {
+   "label": "Construction contingency",
+   "value": 0.1
+  },
+  "opex_min_pu": {
+   "label": "Minimum operating expenses",
+   "value": 4500
+  },
+  "op_reserve_frac": {
+   "label": "Operating reserve minimum",
+   "value": 0.5
+  },
+  "am_fee_cap": {
+   "label": "Asset-management fee cap (opex)",
+   "value": 5000
+  },
+  "vacancy_min": {
+   "label": "Vacancy, years 1-3",
+   "value": 0.07
+  },
+  "rent_trend_max": {
+   "label": "Rent inflation, years 1-3",
+   "value": 0.02
+  },
+  "exp_trend_min": {
+   "label": "Expense inflation",
+   "value": 0.028
+  },
+  "su_balance_tol": {
+   "label": "Sources & Uses balance",
+   "value": 1
+  },
+  "cashflow_ceil_pct": {
+   "label": "Year-1 cash flow ceiling",
+   "value": 0.1
+  },
+  "boost_cap_pct": {
+   "label": "Construction basis boost cap",
+   "value": 0.3
+  }
+ },
+ "kpi_order": [
+  {
+   "kpi_id": "ELG-4PCT-BOND",
+   "group": "Credit Structure",
+   "metric": "4% credit requires bonds",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 3
+  },
+  {
+   "kpi_id": "ELG-9PCT-BOND",
+   "group": "Credit Structure",
+   "metric": "9% + bonds mutually exclusive",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 4
+  },
+  {
+   "kpi_id": "ELG-BOOST-30",
+   "group": "Credit Sizing",
+   "metric": "Construction basis boost cap",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 5
+  },
+  {
+   "kpi_id": "ELG-BOOST-ELIGIBILITY",
+   "group": "Credit Sizing",
+   "metric": "Basis-boost geo eligibility",
+   "severity": "warning",
+   "scope": "INPUT",
+   "row": 6
+  },
+  {
+   "kpi_id": "ELG-POOL-CAP",
+   "group": "Credit Sizing",
+   "metric": "Per-project pool cap",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 7
+  },
+  {
+   "kpi_id": "ELG-CREDIT-MAX",
+   "group": "Credit Sizing",
+   "metric": "Maximum allowable credit",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 8
+  },
+  {
+   "kpi_id": "UW-DSCR-Y1",
+   "group": "DSCR",
+   "metric": "Annual DSCR band (Yr2-17)",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 9
+  },
+  {
+   "kpi_id": "UW-DSCR-15",
+   "group": "DSCR",
+   "metric": "15-yr projected DSCR (y5/10/15)",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 10
+  },
+  {
+   "kpi_id": "FEE-DEVELOPER",
+   "group": "Fee Limits",
+   "metric": "Developer fee",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 11
+  },
+  {
+   "kpi_id": "FEE-ARCHITECT",
+   "group": "Fee Limits",
+   "metric": "Architect / design fee",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 12
+  },
+  {
+   "kpi_id": "FEE-BUILDER-PROFIT",
+   "group": "Fee Limits",
+   "metric": "Builder profit",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 13
+  },
+  {
+   "kpi_id": "FEE-BUILDER-OVERHEAD",
+   "group": "Fee Limits",
+   "metric": "Builder overhead",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 14
+  },
+  {
+   "kpi_id": "FEE-GENERAL-REQUIREMENTS",
+   "group": "Fee Limits",
+   "metric": "General requirements",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 15
+  },
+  {
+   "kpi_id": "FEE-CONTINGENCY",
+   "group": "Fee Limits",
+   "metric": "Construction contingency",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 16
+  },
+  {
+   "kpi_id": "UW-OPEX-MIN",
+   "group": "Operating & Reserves",
+   "metric": "Minimum operating expenses",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 17
+  },
+  {
+   "kpi_id": "UW-OPERATING-RESERVE-6MO",
+   "group": "Operating & Reserves",
+   "metric": "Operating reserve (6 mo)",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 18
+  },
+  {
+   "kpi_id": "UW-RESERVE-PUPA",
+   "group": "Operating & Reserves",
+   "metric": "Repl-reserve deposit / unit",
+   "severity": "warning",
+   "scope": "EXCLUDED",
+   "row": 19
+  },
+  {
+   "kpi_id": "UW-RESERVE-ADEQUACY",
+   "group": "Operating & Reserves",
+   "metric": "Repl-reserve adequacy (all yrs)",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 20
+  },
+  {
+   "kpi_id": "UW-VACANCY13",
+   "group": "Vacancy & Trending",
+   "metric": "Vacancy, years 1-3",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 21
+  },
+  {
+   "kpi_id": "UW-VACANCY4",
+   "group": "Vacancy & Trending",
+   "metric": "Vacancy, years 4+",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 22
+  },
+  {
+   "kpi_id": "UW-TREND-RENT13",
+   "group": "Vacancy & Trending",
+   "metric": "Rent inflation, years 1-3",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 23
+  },
+  {
+   "kpi_id": "UW-TREND-RENT415",
+   "group": "Vacancy & Trending",
+   "metric": "Rent inflation, years 4-15",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 24
+  },
+  {
+   "kpi_id": "UW-TREND-EXPENSE",
+   "group": "Vacancy & Trending",
+   "metric": "Expense inflation (payroll YoY)",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 25
+  },
+  {
+   "kpi_id": "UW-HUD-TDC",
+   "group": "Cost & TDC",
+   "metric": "HUD Total Dev Cost limit",
+   "severity": "error",
+   "scope": "INPUT",
+   "row": 26
+  },
+  {
+   "kpi_id": "UW-SOURCES-USES",
+   "group": "Cost & TDC",
+   "metric": "Sources = Uses balance",
+   "severity": "warning",
+   "scope": "EXCLUDED",
+   "row": 27
+  },
+  {
+   "kpi_id": "UW-SYND-COSTCAP",
+   "group": "Syndication",
+   "metric": "Syndication cost cap",
+   "severity": "error",
+   "scope": "EXCLUDED",
+   "row": 28
+  },
+  {
+   "kpi_id": "UW-CASHFLOW-10PCT",
+   "group": "Cash Flow",
+   "metric": "Year-1 cash-flow ceiling",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 29
+  },
+  {
+   "kpi_id": "UW-DEFERRED-DEV-FEE-15YR",
+   "group": "Deferred Fee",
+   "metric": "Deferred dev-fee payoff by Yr15",
+   "severity": "warning",
+   "scope": "COMPUTED",
+   "row": 30
+  },
+  {
+   "kpi_id": "FEE-ASSET-MGMT-CAP",
+   "group": "Operating & Reserves",
+   "metric": "Asset-mgmt fee cap (opex)",
+   "severity": "info",
+   "scope": "APP-SIDE",
+   "row": 31
+  },
+  {
+   "kpi_id": "ELG-EQUITY-MATCH",
+   "group": "Credit Structure",
+   "metric": "LIHTC equity reconciliation",
+   "severity": "info",
+   "scope": "APP-SIDE",
+   "row": 32
+  },
+  {
+   "kpi_id": "UW-BASIS-RECON",
+   "group": "Cost & TDC",
+   "metric": "Eligible-basis reconciliation",
+   "severity": "info",
+   "scope": "APP-SIDE",
+   "row": 33
+  },
+  {
+   "kpi_id": "UW-SYND-PARTVI",
+   "group": "Syndication",
+   "metric": "Syndication cost reconciliation",
+   "severity": "info",
+   "scope": "APP-SIDE",
+   "row": 34
+  },
+  {
+   "kpi_id": "QAP-TDC-PERUNIT",
+   "group": "Cost & TDC",
+   "metric": "Per-unit TDC vs QAP max",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 35
+  },
+  {
+   "kpi_id": "QAP-TDC-TOTAL",
+   "group": "Cost & TDC",
+   "metric": "Total TDC vs QAP max",
+   "severity": "error",
+   "scope": "COMPUTED",
+   "row": 36
+  }
+ ]
+}
