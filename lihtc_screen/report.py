@@ -121,7 +121,8 @@ def to_dict(screen: Screen) -> dict[str, Any]:
     }
 
 
-def to_markdown(screen: Screen, assumptions: list | None = None) -> str:
+def to_markdown(screen: Screen, assumptions: list | None = None,
+                priced_against: dict | None = None) -> str:
     """The screening dashboard."""
     r, su, deal = screen.result, screen.result.sources_uses, screen.result.deal
     out: list[str] = []
@@ -235,6 +236,21 @@ def to_markdown(screen: Screen, assumptions: list | None = None) -> str:
             price = row["max_price"]
             out.append(f"| {_money(row['soft_money_available'])} | "
                        f"{_money(price) if price is not None else 'nothing works'} |")
+        out.append("")
+
+    # -- what it was priced against --------------------------------------------
+    if priced_against:
+        out.append("### Priced against")
+        out.append("")
+        out.append("| Table | Source |")
+        out.append("|---|---|")
+        labels = {"rent_limits": "Gross rent limits",
+                  "utility_allowances": "Utility allowances"}
+        for key, source in priced_against.items():
+            out.append(f"| {labels.get(key, key)} | {source or 'not stated'} |")
+        if "utility_allowances" not in priced_against:
+            out.append("| Utility allowances | **none supplied - gross limits "
+                       "treated as net, which overstates revenue** |")
         out.append("")
 
     # -- assumptions ----------------------------------------------------------

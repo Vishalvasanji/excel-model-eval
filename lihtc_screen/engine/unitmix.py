@@ -53,14 +53,26 @@ def _gross_rent(deal: DealInputs, bedrooms: int, ami_pct: float) -> float:
     match on the AMI band, then the column for that bedroom count.
     """
     row = deal.rent_limits.get(round(ami_pct, 4))
-    if row is None:                       # exact-match VLOOKUP -> #N/A
-        raise KeyError(f"no gross rent limit for {ami_pct:.0%} AMI")
+    if row is None:
+        # The workbook's exact-match VLOOKUP returns #N/A here. Say which band
+        # is missing instead: a supplied table often covers only the bands the
+        # deal actually uses, and the fix is to add the one named.
+        have = ", ".join(f"{b:.0%}" for b in sorted(deal.rent_limits))
+        raise KeyError(
+            f"no gross rent limit for {ami_pct:.0%} AMI (the table has {have}). "
+            f"Add that band to rent_limits, or set the unit type's ami_pct to a "
+            f"band the table covers.")
     return row[min(max(bedrooms, 0), 4)]
 
 
 def compute(deal: DealInputs) -> UnitMix:
     mix = UnitMix()
     for unit in deal.unit_mix:
+        if unit.count <= 0:
+            # An empty row contributes nothing, so it does not need a rent limit
+            # to exist for its band. The workbook carries such rows as scaffolding
+            # for bands a deal may or may not use.
+            continue
         ua = _utility_allowance(deal, unit.bedrooms)
         gross = _gross_rent(deal, unit.bedrooms, unit.ami_pct)
         mix.lines.append(UnitLine(

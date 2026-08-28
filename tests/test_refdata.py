@@ -27,9 +27,10 @@ def test_new_orleans_resolves_from_common_spellings(query):
 def test_unknown_market_raises_rather_than_substituting():
     with pytest.raises(MarketNotFound) as exc:
         find_market("Baton Rouge")
-    # The error has to be actionable, not just negative.
-    assert "new-orleans-la" in str(exc.value)
-    assert "supplying its rent limits" in str(exc.value)
+    # The error has to be actionable, and name the parameters to pass.
+    message = str(exc.value)
+    assert "new-orleans-la" in message
+    assert "rent_limits" in message and "utility_allowances" in message
 
 
 def test_every_bundled_table_records_its_source():

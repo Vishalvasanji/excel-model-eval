@@ -17,12 +17,20 @@ screen flags it loudly. If the memo has no mix, ask for one before running.
 If a property is unrestricted and being resyndicated, the screen prices at 60%
 unless told otherwise — say so.
 
-### Market — sets rent limits and utility allowances
+### County or parish — decides which rent limits apply
 
-City and parish/county. The screen needs a market whose HUD MTSP limits and
-local utility allowance schedule are bundled; `list_markets` says which are.
-Outside those, say so plainly rather than screening on a neighbouring market's
-numbers.
+The property's county or parish, plus city and state. This determines the HUD
+area whose MTSP rent limits the deal is priced against, and which housing
+authority publishes the utility allowance schedule.
+
+Look both tables up per deal — see `sourcing_limits.md`. The screen refuses to
+run without rent limits rather than borrowing a neighbouring market's.
+
+### Who pays which utilities
+
+The rent roll or the memo's utility section. Only **tenant-paid** utilities get
+a utility allowance; anything the property pays is already in operating
+expenses, and counting it twice understates net rent.
 
 ### Asking price
 

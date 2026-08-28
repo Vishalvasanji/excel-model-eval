@@ -105,6 +105,14 @@ def test_notification_gets_no_reply(base_url):
 
 # -- tools ------------------------------------------------------------------
 
+RENT_LIMITS = {
+    "0.50": [786, 831, 997, 1151, 1302],
+    "0.60": [943, 997, 1197, 1382, 1563],
+}
+UTILITY_ALLOWANCES = {"electricity": [57, 67, 89, 111, 134]}
+RENT_SOURCE = "HUD FY2025 MTSP Income Limits, Orleans Parish LA"
+UA_SOURCE = "HANO Utility Allowance Schedule eff. 09/01/2025"
+
 WESTBEND = {
     "project_name": "Westbend",
     "market": "New Orleans", "state": "LA", "city": "New Orleans",
@@ -141,10 +149,83 @@ def test_screen_deal_warns_when_the_unit_mix_is_guessed(base_url):
     assert any("unit mix" in w.lower() for w in payload["warnings"])
 
 
-def test_screen_deal_warns_on_an_unloaded_market(base_url):
-    args = dict(WESTBEND, market="Baton Rouge")
+SUPPLIED = {
+    "project_name": "Bayou Ridge", "state": "LA", "city": "Baton Rouge",
+    "asking_price": 4_000_000,
+    "rent_limits": RENT_LIMITS, "rent_limits_source": RENT_SOURCE,
+    "utility_allowances": UTILITY_ALLOWANCES,
+    "utility_allowances_source": UA_SOURCE,
+    "unit_mix": WESTBEND["unit_mix"],
+}
+
+
+def test_screens_on_supplied_reference_data(base_url):
+    """The normal path: limits looked up per deal and passed in."""
+    payload = call(base_url, "screen_deal", dict(SUPPLIED))["structuredContent"]
+    assert payload["priced_against"]["rent_limits"] == RENT_SOURCE
+    assert payload["priced_against"]["utility_allowances"] == UA_SOURCE
+    assert payload["screen"]["answer"]["required_soft_money"] >= 0
+
+
+def test_supplied_limits_reproduce_the_bundled_market(base_url):
+    """Passing New Orleans' own tables must match naming the bundled market."""
+    supplied = dict(WESTBEND)
+    supplied.pop("market")
+    supplied.update(rent_limits=RENT_LIMITS, rent_limits_source=RENT_SOURCE,
+                    utility_allowances=UTILITY_ALLOWANCES,
+                    utility_allowances_source=UA_SOURCE)
+    a = call(base_url, "screen_deal", dict(WESTBEND))["structuredContent"]
+    b = call(base_url, "screen_deal", supplied)["structuredContent"]
+    assert (a["screen"]["operations"]["gross_rental_income"]
+            == pytest.approx(b["screen"]["operations"]["gross_rental_income"]))
+
+
+def test_supplied_limits_override_a_bundled_market(base_url):
+    args = dict(WESTBEND, rent_limits={"0.60": [700, 750, 900, 1050, 1200]},
+                rent_limits_source="test override")
     payload = call(base_url, "screen_deal", args)["structuredContent"]
-    assert any("Baton Rouge" in w for w in payload["warnings"])
+    assert payload["priced_against"]["rent_limits"] == "test override"
+    baseline = call(base_url, "screen_deal", dict(WESTBEND))["structuredContent"]
+    assert (payload["screen"]["operations"]["gross_rental_income"]
+            < baseline["screen"]["operations"]["gross_rental_income"])
+
+
+def test_unloaded_market_without_limits_is_refused(base_url):
+    """Never screen a market on another market's rents."""
+    result = call(base_url, "screen_deal", dict(WESTBEND, market="Baton Rouge"))
+    assert result["isError"]
+    text = result["content"][0]["text"]
+    assert "Baton Rouge" in text and "rent_limits" in text
+
+
+def test_no_market_and_no_limits_is_refused(base_url):
+    args = {k: v for k, v in WESTBEND.items() if k not in ("market", "city", "parish")}
+    result = call(base_url, "screen_deal", args)
+    assert result["isError"]
+    assert "no rent limits" in result["content"][0]["text"]
+
+
+def test_missing_utility_allowances_warns_loudly(base_url):
+    args = dict(SUPPLIED)
+    args.pop("utility_allowances")
+    args.pop("utility_allowances_source")
+    payload = call(base_url, "screen_deal", args)["structuredContent"]
+    assert any("overstates revenue" in w for w in payload["warnings"])
+
+
+def test_bad_reference_data_is_rejected_with_a_reason(base_url):
+    annual = dict(SUPPLIED, rent_limits={"0.60": [11316, 11964, 14364, 16584, 18756]})
+    result = call(base_url, "screen_deal", annual)
+    assert result["isError"]
+    assert "monthly, not annual" in result["content"][0]["text"]
+
+
+def test_rent_limits_without_a_source_are_rejected(base_url):
+    args = dict(SUPPLIED)
+    args.pop("rent_limits_source")
+    result = call(base_url, "screen_deal", args)
+    assert result["isError"]
+    assert "source" in result["content"][0]["text"]
 
 
 def test_screen_deal_needs_units_or_a_mix(base_url):

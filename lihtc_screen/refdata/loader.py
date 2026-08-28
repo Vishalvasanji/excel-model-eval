@@ -33,11 +33,12 @@ class MarketNotFound(LookupError):
         self.query = query
         self.available = available
         super().__init__(
-            f"No reference data bundled for {query!r}. "
-            f"Markets available: {', '.join(available) or '(none)'}. "
-            f"Screen this deal by supplying its rent limits and utility "
-            f"allowances directly, or add the market to markets.json with "
-            f"its HUD MTSP limits and the local utility allowance schedule."
+            f"No reference data bundled for {query!r} "
+            f"(bundled: {', '.join(available) or 'none'}). Look up this market's "
+            f"HUD MTSP gross rent limits and its local housing authority's "
+            f"utility allowance schedule, and pass them as `rent_limits` and "
+            f"`utility_allowances` with their sources. Screening it on another "
+            f"market's rents would be wrong all the way through."
         )
 
 

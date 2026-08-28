@@ -23,8 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from lihtc_screen import defaults                       # noqa: E402
 from lihtc_screen.inputs import DealInputs              # noqa: E402
-from lihtc_screen.refdata import (MarketNotFound, available_markets,  # noqa: E402
-                                  find_market, load_markets)
+from lihtc_screen.refdata import (MarketNotFound, ReferenceDataError,  # noqa: E402
+                                  apply_to_deal, available_markets, find_market,
+                                  load_markets, tdc_limits_for_region)
 from lihtc_screen.report import to_dict, to_markdown    # noqa: E402
 from lihtc_screen.solver import screen as run_screen, sensitivity  # noqa: E402
 
@@ -74,12 +75,43 @@ TOOLS = [
                         "required": ["bedrooms", "count"],
                     },
                 },
+                "rent_limits": {
+                    "type": "object",
+                    "description": (
+                        "HUD MTSP gross rent limits for this property's county or "
+                        "HUD area, keyed by AMI band, each an array of five monthly "
+                        "rents for 0-4 bedrooms. Look these up per deal rather than "
+                        "relying on a bundled market. Example: "
+                        '{"0.50": [786, 831, 997, 1151, 1302], '
+                        '"0.60": [943, 997, 1197, 1382, 1563]}')},
+                "rent_limits_source": {
+                    "type": "string",
+                    "description": (
+                        "Where the rent limits came from, e.g. 'HUD FY2025 MTSP "
+                        "Income Limits, Orleans Parish LA'. Required with "
+                        "rent_limits; the screen records what it priced against.")},
+                "utility_allowances": {
+                    "type": "object",
+                    "description": (
+                        "The local housing authority's monthly utility allowance "
+                        "schedule for tenant-paid utilities, keyed by utility "
+                        "(electricity, water, sewer, trash, gas, other), each an "
+                        "array of five monthly amounts for 0-4 bedrooms. Net rent "
+                        "is the gross limit less these, so omitting them overstates "
+                        'revenue. Example: {"electricity": [57, 67, 89, 111, 134]}')},
+                "utility_allowances_source": {
+                    "type": "string",
+                    "description": (
+                        "The schedule and its effective date, e.g. 'HANO Utility "
+                        "Allowance Schedule eff. 09/01/2025'. Required with "
+                        "utility_allowances.")},
                 "market": {
                     "type": "string",
                     "description": (
-                        "City, parish or HUD area name. Sets rent limits, utility "
-                        "allowances and TDC limits. Call list_markets for what is "
-                        "loaded.")},
+                        "A bundled market to draw rent limits, utility allowances "
+                        "and TDC limits from, instead of supplying them. Call "
+                        "list_markets for what is loaded. Prefer looking the "
+                        "current tables up and passing them directly.")},
                 "state": {"type": "string"},
                 "parish": {"type": "string"},
                 "city": {"type": "string"},
@@ -203,8 +235,12 @@ def _default_mix(units: int) -> list[dict]:
     ]
 
 
-def build_deal(args: dict) -> tuple[DealInputs, list, list[str]]:
-    """Turn tool arguments into a solved-ready deal, plus assumptions and warnings."""
+def build_deal(args: dict) -> tuple[DealInputs, list, list[str], dict]:
+    """Turn tool arguments into a solved-ready deal.
+
+    Returns the deal, the defaults applied, any warnings, and a record of which
+    reference tables it was priced against and where they came from.
+    """
     warnings: list[str] = []
     provided: set[str] = set()
 
@@ -251,18 +287,65 @@ def build_deal(args: dict) -> tuple[DealInputs, list, list[str]]:
                 line.unit_cost = line.quantity = 0.0
 
     # -- market tables -------------------------------------------------------
+    # Rents drive NOI, NOI drives debt, debt drives the subsidy requirement, so
+    # screening on the wrong market's limits is wrong all the way down. Tables
+    # are either supplied for this deal, or drawn from a bundled market by name;
+    # there is no silent fallback.
+    supplied = apply_to_deal(
+        deal,
+        rent_limits=args.get("rent_limits"),
+        rent_limits_source=args.get("rent_limits_source"),
+        utility_allowances=args.get("utility_allowances"),
+        utility_allowances_source=args.get("utility_allowances_source"),
+    )
+    for key in supplied:
+        provided.add(key if key == "rent_limits" else "ua_electricity")
+    priced_against = dict(supplied)
+
     query = args.get("market") or args.get("city") or args.get("parish")
+    market = None
     if query:
         try:
             market = find_market(query, args.get("state"))
-            market.apply_to(deal)
-            provided |= {"rent_limits", "ua_electricity"}
         except MarketNotFound as exc:
-            warnings.append(str(exc))
-    else:
+            if not supplied.get("rent_limits"):
+                raise ValueError(str(exc)) from None
+            warnings.append(
+                f"{query} has no bundled reference data; the supplied rent limits "
+                f"were used instead.")
+
+    if market is not None:
+        # Anything supplied for this deal wins; the market fills the rest.
+        if "rent_limits" not in supplied:
+            deal.rent_limits = dict(market.rent_limits)
+            priced_against["rent_limits"] = market.sources.get("rent_limits")
+            provided.add("rent_limits")
+        if "utility_allowances" not in supplied:
+            deal.ua_electricity = list(market.ua_electricity)
+            deal.ua_water = list(market.ua_water)
+            deal.ua_sewer = list(market.ua_sewer)
+            deal.ua_trash = list(market.ua_trash)
+            priced_against["utility_allowances"] = market.sources.get("utility_allowances")
+            provided.add("ua_electricity")
+        if market.tdc_region:
+            deal.tdc_region = market.tdc_region
+            limits = tdc_limits_for_region(market.tdc_region)
+            if limits:
+                deal.tdc_limits = limits
+
+    if "rent_limits" not in priced_against:
+        raise ValueError(
+            "This deal has no rent limits. Look up the HUD MTSP gross rent limits "
+            "for the property's county or HUD area and pass them as `rent_limits` "
+            "with a `rent_limits_source`, or name a bundled market with `market` "
+            "(see list_markets). Rents set NOI, NOI sets the debt, and the debt "
+            "sets the subsidy requirement, so this is not something to assume.")
+    if "utility_allowances" not in priced_against:
         warnings.append(
-            "No market given, so New Orleans rent limits and utility allowances "
-            "were used. Set `market` for anywhere else.")
+            "No utility allowances supplied, so gross rent limits were treated as "
+            "net. Tenant-paid utilities reduce collectable rent, so this overstates "
+            "revenue and understates the subsidy needed. Pass the local housing "
+            "authority's schedule as `utility_allowances`.")
 
     applied = defaults.apply(
         deal, state=args.get("state"), parish=args.get("parish"),
@@ -278,22 +361,22 @@ def build_deal(args: dict) -> tuple[DealInputs, list, list[str]]:
     hard = hard_costs(deal, amounts)["hard_costs"]
     applied.assumptions.extend(defaults.derived_soft_costs(deal, hard, provided))
 
-    return deal, applied.assumptions, warnings
+    return deal, applied.assumptions, warnings, priced_against
 
 
 # ------------------------------------------------------------ handlers ------
 
 def tool_screen_deal(args: dict) -> dict:
-    deal, assumptions, warnings = build_deal(args)
+    deal, assumptions, warnings, priced_against = build_deal(args)
     result = run_screen(deal)
     fmt = args.get("format", "both")
-    payload: dict = {"warnings": warnings}
+    payload: dict = {"warnings": warnings, "priced_against": priced_against}
     if fmt in ("json", "both"):
         payload["screen"] = to_dict(result)
         payload["assumptions"] = [
             {"input": a.label, "value": a.value, "basis": a.basis} for a in assumptions]
     if fmt in ("markdown", "both"):
-        payload["dashboard"] = to_markdown(result, assumptions)
+        payload["dashboard"] = to_markdown(result, assumptions, priced_against)
     return payload
 
 
@@ -301,7 +384,7 @@ def tool_solve_max_price(args: dict) -> dict:
     deal_args = dict(args.get("deal") or {})
     if args.get("soft_money_available") is not None:
         deal_args["soft_money_available"] = args["soft_money_available"]
-    deal, assumptions, warnings = build_deal(deal_args)
+    deal, assumptions, warnings, _ = build_deal(deal_args)
     result = run_screen(deal)
     return {
         "warnings": warnings,
@@ -316,7 +399,7 @@ def tool_solve_max_price(args: dict) -> dict:
 
 
 def tool_sensitivity(args: dict) -> dict:
-    deal, _, warnings = build_deal(dict(args.get("deal") or {}))
+    deal, _, warnings, _ = build_deal(dict(args.get("deal") or {}))
     variable = args["variable"]
     values = args["values"]
     if not values:
@@ -400,7 +483,7 @@ def handle_rpc(message: dict) -> dict | None:
             return rpc_error(request_id, METHOD_NOT_FOUND, f"unknown tool {name!r}")
         try:
             payload = handler(params.get("arguments") or {})
-        except (ValueError, KeyError, LookupError) as exc:
+        except (ValueError, KeyError, LookupError, ReferenceDataError) as exc:
             return {"jsonrpc": "2.0", "id": request_id, "result": {
                 "isError": True,
                 "content": [{"type": "text", "text": str(exc)}],

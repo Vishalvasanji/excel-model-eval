@@ -25,12 +25,30 @@ Read `reference/om_extraction.md` for what to pull and where it usually hides.
 The fields that most move the answer, in order:
 
 - **unit mix** — bedrooms, count, square feet, AMI band per type
-- **market** — city or parish, which sets rent limits and utility allowances
+- **county or parish** — which HUD area the property sits in
 - **asking price**
 - **rehab scope** — hard cost per unit
 - **equity pricing** and **interest rates**
 
-### 2. Ask only what you cannot default
+### 2. Look up the rent limits and utility allowances
+
+**Do this for every deal.** Read `reference/sourcing_limits.md`, then find:
+
+- the **HUD MTSP gross rent limits** for the property's county and the current
+  year, for every AMI band the unit mix uses
+- the **local housing authority's utility allowance schedule**, for the
+  tenant-paid utilities only
+
+Pass both to `screen_deal` as `rent_limits` and `utility_allowances`, each with
+its source. These set net rent, which sets NOI, which sizes the debt, which
+decides the subsidy the deal needs — a limit from the wrong county or the wrong
+year is wrong all the way through.
+
+The connector refuses to screen without rent limits, and rejects tables that are
+annual, out of order, or implausible. If you cannot find them, say so and ask —
+do not estimate them or carry them over from another deal.
+
+### 3. Ask only what you cannot default
 
 Call `get_defaults` first and show what the screen would assume. Then ask only
 about facts that materially move the answer and cannot be defaulted — normally
@@ -40,16 +58,18 @@ Ask them together, in one message, with your own recommendation for each.
 Never invent a unit mix, a rent limit, or a utility allowance. Everything else
 has a defensible default, and the screen reports every default it applied.
 
-### 3. Screen it
+### 4. Screen it
 
 Call `screen_deal` with everything you have. Then:
 
 - Lead with the verdict and the minimum soft funding, in one sentence.
 - Show the dashboard the connector returns.
-- Surface every warning it returns — a guessed unit mix or an unbundled market
-  changes the answer materially, and the reader has to know.
+- State what it was priced against — the `priced_against` field names the rent
+  limit and utility allowance sources actually used.
+- Surface every warning it returns. A guessed unit mix, or gross limits treated
+  as net because no allowances were supplied, changes the answer materially.
 
-### 4. Follow up
+### 5. Follow up
 
 Use `sensitivity` when the deal is close, on whatever is least certain — usually
 `rehab_per_unit`, then `equity_price`, then `perm_coupon`. Use `solve_max_price`
