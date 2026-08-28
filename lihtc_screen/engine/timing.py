@@ -67,7 +67,8 @@ def _period_interest(balance: float, base_uses: float, other_sources: float,
 
 def compute(deal: DealInputs, *, acquisition: float, hard_costs: float,
             soft_costs: float, developer_fee: float, reserves: float,
-            financing_fees: float, equity: float, deferred_fee: float) -> Timing:
+            financing_fees: float, equity: float, deferred_fee: float,
+            soft_money: float) -> Timing:
     t = Timing()
 
     payin = {p: equity * share for p, share in deal.equity_payin.items()}
@@ -106,9 +107,9 @@ def compute(deal: DealInputs, *, acquisition: float, hard_costs: float,
         equity_in = payin.get(p, 0.0)
         # Each equity installment pays down the bridge that stood in for it.
         bridge_payback = -equity_in if p > PRECONSTRUCTION[-1] else 0.0
-        soft_money = (deal.cdbg + deal.lhc_home) * share
+        soft_draw = soft_money * share
         deferred = deferred_fee * share
-        other = bridge_draw + bridge_payback + equity_in + soft_money + deferred
+        other = bridge_draw + bridge_payback + equity_in + soft_draw + deferred
 
         # -- bridge interest (independent of the bond draw) -----------------
         rate_b = deal.bridge_rate / 12 if monthly else deal.bridge_rate

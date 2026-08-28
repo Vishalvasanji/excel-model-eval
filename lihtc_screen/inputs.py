@@ -187,8 +187,8 @@ class DealInputs:
 
     # -- Sources & Uses ----------------------------------------------------
     acquisition_cost: float = 4_000_000         # I30
-    cdbg: float = 7_500_000                     # I16
-    lhc_home: float = 0                         # I17
+    cdbg: float = 7_500_000                     # I16, soft money already committed
+    lhc_home: float = 0                         # I17, soft money already committed
     deferred_gc_fee: float = 0                  # I21
     deferred_fee_pct: float = 0.36              # D22, share of developer fee
     general_requirements_pct: float = 0.06      # D38
@@ -288,7 +288,17 @@ class DealInputs:
     # "workbook" reproduces the file exactly (bond is the balancing plug).
     # "screen"  sizes the bond on DSCR and solves soft money to its minimum.
     mode: str = "screen"
-    soft_money_available: float = 0.0
+    # Total soft funding obtainable, committed or not. Defaults to what is
+    # already committed (cdbg + lhc_home) when left unset.
+    soft_money_available: float | None = None
+
+    def committed_soft_money(self) -> float:
+        return self.cdbg + self.lhc_home
+
+    def obtainable_soft_money(self) -> float:
+        if self.soft_money_available is None:
+            return self.committed_soft_money()
+        return self.soft_money_available
 
     def units(self) -> int:
         return sum(u.count for u in self.unit_mix)

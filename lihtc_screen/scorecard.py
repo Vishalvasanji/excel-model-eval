@@ -27,6 +27,20 @@ RULES_PATH = Path(__file__).parent / "refdata" / "qap_rules.json"
 PASS, FAIL, NA, PENDING = "PASS", "FAIL", "N/A", "PENDING"
 COUNTED_SCOPES = {"COMPUTED", "INPUT"}
 
+# A value that sits exactly on its threshold meets it. Debt sized to the DSCR
+# floor and reserves sized to a fraction of opex both land on the boundary by
+# construction, so comparisons carry a relative tolerance rather than failing
+# on the last bit of floating-point noise.
+BOUNDARY_TOLERANCE = 1e-9
+
+
+def at_least(value: float, threshold: float) -> bool:
+    return value >= threshold - max(abs(threshold) * BOUNDARY_TOLERANCE, 1e-9)
+
+
+def at_most(value: float, threshold: float) -> bool:
+    return value <= threshold + max(abs(threshold) * BOUNDARY_TOLERANCE, 1e-9)
+
 
 def _load() -> dict:
     return json.loads(RULES_PATH.read_text())
@@ -111,11 +125,11 @@ def _dscr_message(low: float, high: float, floor: float, ceiling: float,
     cannot carry its debt, above the ceiling it is under-levered and is
     absorbing more subsidy than it needs.
     """
-    if low < floor:
+    if not at_least(low, floor):
         where = f" in year {low_year}" if low_year else ""
         return (f"DSCR falls to {low:.3f}{where}, below the {floor:.2f} floor - "
                 f"the deal cannot carry this much debt")
-    if high > ceiling:
+    if not at_most(high, ceiling):
         where = f" in year {high_year}" if high_year else ""
         return (f"DSCR reaches {high:.3f}{where}, above the {ceiling:.2f} ceiling - "
                 f"the deal is under-levered and is taking more subsidy than it needs")
@@ -176,7 +190,7 @@ def evaluate(result) -> Scorecard:
     # -- credit sizing ------------------------------------------------------
     add("ELG-BOOST-30", "Credit Sizing", "Construction basis boost cap",
         deal.basis_boost, PARAMS["boost_cap_pct"],
-        gate(deal.basis_boost <= PARAMS["boost_cap_pct"]), "error", "COMPUTED")
+        gate(at_most(deal.basis_boost, PARAMS["boost_cap_pct"])), "error", "COMPUTED")
 
     boost_ok = deal.basis_boost == 0 or deal.boost_eligible == "Yes"
     add("ELG-BOOST-ELIGIBILITY", "Credit Sizing", "Basis-boost geo eligibility",
@@ -188,7 +202,7 @@ def evaluate(result) -> Scorecard:
     add("ELG-POOL-CAP", "Credit Sizing", "Per-project pool cap",
         "n/a" if is_4pct else tc.annual_credit,
         "N/A (PAB cap)" if is_4pct else _pool_cap(deal.pool),
-        NA if is_4pct else gate(tc.annual_credit <= _pool_cap(deal.pool)),
+        NA if is_4pct else gate(at_most(tc.annual_credit, _pool_cap(deal.pool))),
         "error", "COMPUTED")
 
     # Gap credit: what the equity gap alone would support.
@@ -206,7 +220,7 @@ def evaluate(result) -> Scorecard:
     floor, ceiling = PARAMS["dscr_floor"], PARAMS["dscr_ceiling"]
     add("UW-DSCR-Y1", "DSCR", "Annual DSCR band (Yr2-17)", result.min_dscr,
         f"{floor:.2f}-{ceiling:.2f}",
-        gate(result.min_dscr >= floor and result.max_dscr <= ceiling),
+        gate(at_least(result.min_dscr, floor) and at_most(result.max_dscr, ceiling)),
         "error", "COMPUTED",
         _dscr_message(result.min_dscr, result.max_dscr, floor, ceiling,
                       result.min_dscr_year, result.max_dscr_year))
@@ -217,7 +231,7 @@ def evaluate(result) -> Scorecard:
     spot_floor = PARAMS["dscr_15yr_floor"]
     add("UW-DSCR-15", "DSCR", "15-yr projected DSCR (y5/10/15)", spot_min,
         f"{spot_floor:.2f}-{ceiling:.2f}",
-        gate(spot_min >= spot_floor and spot_max <= ceiling), "error", "COMPUTED",
+        gate(at_least(spot_min, spot_floor) and at_most(spot_max, ceiling)), "error", "COMPUTED",
         _dscr_message(spot_min, spot_max, spot_floor, ceiling))
 
     # -- fee limits ---------------------------------------------------------
@@ -225,12 +239,12 @@ def evaluate(result) -> Scorecard:
                   PARAMS["developer_fee_cap_pct"] * su.developer_fee_base)
     add("FEE-DEVELOPER", "Fee Limits", "Developer fee", su.developer_fee,
         "No cap (4% bond)" if is_4pct else dev_cap,
-        PASS if is_4pct else gate(su.developer_fee <= dev_cap), "error", "COMPUTED")
+        PASS if is_4pct else gate(at_most(su.developer_fee, dev_cap)), "error", "COMPUTED")
 
     arch_cap = PARAMS["arch_pct"] * su.hard_costs
     add("FEE-ARCHITECT", "Fee Limits", "Architect / design fee",
         deal.architecture_engineering, arch_cap,
-        gate(deal.architecture_engineering <= arch_cap), "error", "COMPUTED")
+        gate(at_most(deal.architecture_engineering, arch_cap)), "error", "COMPUTED")
 
     for kpi, label, value, pct in (
         ("FEE-BUILDER-PROFIT", "Builder profit", su.gc_profit, "builder_profit_pct"),
@@ -238,33 +252,33 @@ def evaluate(result) -> Scorecard:
         ("FEE-GENERAL-REQUIREMENTS", "General requirements", su.general_requirements, "gen_req_pct"),
     ):
         cap = PARAMS[pct] * su.builder_fee_base
-        add(kpi, "Fee Limits", label, value, cap, gate(value <= cap + 1),
+        add(kpi, "Fee Limits", label, value, cap, gate(at_most(value, cap + 1)),
             "error", "COMPUTED")
 
     cont_cap = PARAMS["contingency_pct"] * su.hard_costs
     add("FEE-CONTINGENCY", "Fee Limits", "Construction contingency",
-        su.contingency, cont_cap, gate(su.contingency <= cont_cap),
+        su.contingency, cont_cap, gate(at_most(su.contingency, cont_cap)),
         "error", "COMPUTED")
 
     # -- operating and reserves ---------------------------------------------
     opex_floor = PARAMS["opex_min_pu"] * units
     add("UW-OPEX-MIN", "Operating & Reserves", "Minimum operating expenses",
-        stabilised_opex, opex_floor, gate(stabilised_opex >= opex_floor),
+        stabilised_opex, opex_floor, gate(at_least(stabilised_opex, opex_floor)),
         "warning", "COMPUTED")
 
     res_floor = PARAMS["op_reserve_frac"] * stabilised_opex
     add("UW-OPERATING-RESERVE-6MO", "Operating & Reserves", "Operating reserve (6 mo)",
         su.operating_reserve, res_floor,
-        gate(su.operating_reserve >= res_floor), "warning", "COMPUTED")
+        gate(at_least(su.operating_reserve, res_floor)), "warning", "COMPUTED")
 
     pupa_floor = _reserve_floor(deal.project_type)
     yr1_pupa = pf.reserves[0] / units if units else 0.0
     add("UW-RESERVE-PUPA", "Operating & Reserves", "Repl-reserve deposit / unit",
-        yr1_pupa, pupa_floor, gate(yr1_pupa >= pupa_floor), "warning", "EXCLUDED")
+        yr1_pupa, pupa_floor, gate(at_least(yr1_pupa, pupa_floor)), "warning", "EXCLUDED")
 
     min_pupa = min(pf.reserves) / units if units else 0.0
     add("UW-RESERVE-ADEQUACY", "Operating & Reserves", "Repl-reserve adequacy (all yrs)",
-        min_pupa, pupa_floor, gate(min_pupa >= pupa_floor), "warning", "COMPUTED")
+        min_pupa, pupa_floor, gate(at_least(min_pupa, pupa_floor)), "warning", "COMPUTED")
 
     add("FEE-ASSET-MGMT-CAP", "Operating & Reserves", "Asset-mgmt fee cap (opex)",
         "n/a", "$5,000/yr", NA, "info", "APP-SIDE")
@@ -274,7 +288,7 @@ def evaluate(result) -> Scorecard:
     for kpi, label in (("UW-VACANCY13", "Vacancy, years 1-3"),
                        ("UW-VACANCY4", "Vacancy, years 4+")):
         add(kpi, "Vacancy & Trending", label, deal.vacancy_rate, vac_min,
-            gate(deal.vacancy_rate >= vac_min), "warning", "COMPUTED")
+            gate(at_least(deal.vacancy_rate, vac_min)), "warning", "COMPUTED")
 
     rent_max = PARAMS["rent_trend_max"]
     trend_13 = pf.gross_rent[1] / pf.gross_rent[0] - 1 if pf.gross_rent[0] else 0.0
@@ -293,7 +307,7 @@ def evaluate(result) -> Scorecard:
     hud_limit = su.tdc_limit_total
     add("UW-HUD-TDC", "Cost & TDC", "HUD Total Dev Cost limit", su.total_uses,
         hud_limit if hud_limit else "(no limit loaded)",
-        PENDING if not hud_limit else gate(su.total_uses <= hud_limit),
+        PENDING if not hud_limit else gate(at_most(su.total_uses, hud_limit)),
         "error", "INPUT",
         "" if not hud_limit or su.total_uses <= hud_limit
         else "Total development cost exceeds the HUD per-unit TDC limit")
@@ -307,12 +321,12 @@ def evaluate(result) -> Scorecard:
 
     add("QAP-TDC-PERUNIT", "Cost & TDC", "Per-unit TDC vs QAP max",
         result.tdc_per_unit, su.tdc_limit_per_unit,
-        gate(result.tdc_per_unit <= su.tdc_limit_per_unit), "error", "COMPUTED",
-        "" if result.tdc_per_unit <= su.tdc_limit_per_unit
+        gate(at_most(result.tdc_per_unit, su.tdc_limit_per_unit)), "error", "COMPUTED",
+        "" if at_most(result.tdc_per_unit, su.tdc_limit_per_unit)
         else "Per-unit cost exceeds the QAP maximum")
     add("QAP-TDC-TOTAL", "Cost & TDC", "Total TDC vs QAP max",
         su.total_uses, su.tdc_limit_total,
-        gate(su.total_uses <= su.tdc_limit_total), "error", "COMPUTED")
+        gate(at_most(su.total_uses, su.tdc_limit_total)), "error", "COMPUTED")
 
     # -- syndication ---------------------------------------------------------
     synd_pct = (PARAMS["syndication_cap_public"] if deal.syndication == "Public"
@@ -320,7 +334,7 @@ def evaluate(result) -> Scorecard:
     synd_cap = synd_pct * tc.equity
     add("UW-SYND-COSTCAP", "Syndication", "Syndication cost cap",
         deal.syndication_costs, synd_cap,
-        gate(deal.syndication_costs <= synd_cap), "error", "EXCLUDED")
+        gate(at_most(deal.syndication_costs, synd_cap)), "error", "EXCLUDED")
     add("UW-SYND-PARTVI", "Syndication", "Syndication cost reconciliation",
         "n/a", "Part VI = Dev Costs", NA, "info", "APP-SIDE")
     add("ELG-EQUITY-MATCH", "Credit Structure", "LIHTC equity reconciliation",
@@ -330,17 +344,17 @@ def evaluate(result) -> Scorecard:
     cash_ceiling = PARAMS["cashflow_ceil_pct"] * stabilised_opex
     yr2_cash = pf.cash_after_fees[1] if len(pf.cash_after_fees) > 1 else 0.0
     add("UW-CASHFLOW-10PCT", "Cash Flow", "Year-1 cash-flow ceiling",
-        yr2_cash, cash_ceiling, gate(yr2_cash <= cash_ceiling),
+        yr2_cash, cash_ceiling, gate(at_most(yr2_cash, cash_ceiling)),
         "warning", "COMPUTED",
-        "" if yr2_cash <= cash_ceiling
+        "" if at_most(yr2_cash, cash_ceiling)
         else "Stabilised cash flow exceeds 10% of operating expenses")
 
     deferred = su.deferred_fees
     cum15 = result.cumulative_cash_year_15
     add("UW-DEFERRED-DEV-FEE-15YR", "Deferred Fee", "Deferred dev-fee payoff by Yr15",
         cum15, deferred,
-        NA if deferred == 0 else gate(cum15 >= deferred), "warning", "COMPUTED",
-        "" if deferred == 0 or cum15 >= deferred
+        NA if deferred == 0 else gate(at_least(cum15, deferred)), "warning", "COMPUTED",
+        "" if deferred == 0 or at_least(cum15, deferred)
         else "Deferred developer fee is not repaid within 15 years")
 
     # -- verdict --------------------------------------------------------------

@@ -27,6 +27,7 @@ from .engine import (construction, expenses, financing, leaseup, loans, noi,
                      waterfall)
 
 MAX_ITERATIONS = 400
+NOI_MAX_ITERATIONS = 200
 TOLERANCE = 1e-7        # dollars of movement in total uses
 
 
@@ -50,7 +51,12 @@ class Result:
     valuation: valuation.Valuation
     iterations: int = 0
     converged: bool = False
+    # Total soft funding the deal needs: the gap left after DSCR-sized debt,
+    # LIHTC equity and deferred fees.
     required_soft_money: float = 0.0
+    # What is already committed, and the two ways that can differ from the need.
+    committed_soft_money: float = 0.0
+    additional_soft_money_needed: float = 0.0
     soft_money_surplus: float = 0.0
 
     # -- headline figures --------------------------------------------------
@@ -104,7 +110,18 @@ def solve(deal: DealInputs) -> Result:
         noi_for_tax=0.0, bond=0.0, equity=0.0, annual_credit=0.0,
         reserves=0.0, operating_reserve=0.0, interest_reserve=0.0,
         capitalised_interest=0.0, financing_fees=0.0, total_uses=0.0,
+        soft_money=None if deal.mode == "screen" else None,
     )
+    if deal.mode == "screen":
+        state["soft_money"] = deal.cdbg + deal.lhc_home
+
+    # The DSCR-sized loan depends only on NOI and the debt terms, neither of
+    # which moves with total development cost, so it is solved once rather than
+    # re-bisected on every pass of the loop.
+    sized_loan = None
+    if deal.mode != "workbook":
+        seed_exp, seed_noi = stabilised_noi(deal, mix)
+        sized_loan = _dscr_sized_loan(deal, mix, seed_noi, seed_exp)
 
     iterations = 0
     converged = False
@@ -112,8 +129,7 @@ def solve(deal: DealInputs) -> Result:
         previous = state["total_uses"]
 
         # -- property level -------------------------------------------------
-        exp = expenses.compute(deal, mix, state["noi_for_tax"])
-        n = noi.compute(deal, mix, exp)
+        exp, n = stabilised_noi(deal, mix)
         state["noi_for_tax"] = n.noi
 
         # -- development budget ---------------------------------------------
@@ -129,6 +145,7 @@ def solve(deal: DealInputs) -> Result:
             financing_fees=state["financing_fees"],
             bonds=state["bond"],
             equity=state["equity"],
+            soft_money=state["soft_money"],
         )
         cst = construction.compute(deal, mix, su.general_requirements,
                                    su.gc_overhead, su.gc_profit, su.contingency)
@@ -138,7 +155,7 @@ def solve(deal: DealInputs) -> Result:
             # The bond funds whatever the other sources do not, period by period.
             bond = state["bond"]
         else:
-            bond = _dscr_sized_loan(deal, mix, n, exp, su)
+            bond = sized_loan
 
         fin = financing.compute(deal, bond, n.sizing_noi)
 
@@ -149,6 +166,7 @@ def solve(deal: DealInputs) -> Result:
             soft_costs=su.soft_costs, developer_fee=su.developer_fee,
             reserves=su.reserves, financing_fees=fin.total_fees,
             equity=state["equity"], deferred_fee=su.deferred_fees,
+            soft_money=su.soft_money,
         )
         if deal.mode == "workbook":
             bond = tm.bond_total
@@ -162,6 +180,12 @@ def solve(deal: DealInputs) -> Result:
         perm = loans.compute(deal, bond)
         pf = proforma.compute(deal, lu, n, perm)
         reserve_req = waterfall.size_reserves(lu, pf.opex[1] if len(pf.opex) > 1 else 0.0)
+
+        # In screen mode the subsidy requirement is itself part of the loop:
+        # it is whatever the priced stack cannot cover, and it feeds the basis.
+        if deal.mode == "screen":
+            state["soft_money"] = max(
+                0.0, su.total_uses - bond - tc.equity - su.deferred_fees)
 
         # -- feed back ---------------------------------------------------------
         state.update(
@@ -182,8 +206,7 @@ def solve(deal: DealInputs) -> Result:
             break
 
     # -- final pass, so every sheet reflects the converged inputs -------------
-    exp = expenses.compute(deal, mix, state["noi_for_tax"])
-    n = noi.compute(deal, mix, exp)
+    exp, n = stabilised_noi(deal, mix)
     cst = construction.compute(deal, mix, 0, 0, 0, 0)
     su = sources_uses.compute(
         deal, mix, amounts=cst.amounts, annual_credit=state["annual_credit"],
@@ -191,7 +214,7 @@ def solve(deal: DealInputs) -> Result:
         interest_reserve=state["interest_reserve"],
         capitalised_interest=state["capitalised_interest"],
         financing_fees=state["financing_fees"], bonds=state["bond"],
-        equity=state["equity"],
+        equity=state["equity"], soft_money=state["soft_money"],
     )
     cst = construction.compute(deal, mix, su.general_requirements, su.gc_overhead,
                                su.gc_profit, su.contingency)
@@ -201,6 +224,7 @@ def solve(deal: DealInputs) -> Result:
         soft_costs=su.soft_costs, developer_fee=su.developer_fee,
         reserves=su.reserves, financing_fees=fin.total_fees,
         equity=state["equity"], deferred_fee=su.deferred_fees,
+        soft_money=su.soft_money,
     )
     tc = taxcredit_compute(deal, su, state["bond"], state["equity"], fin)
     lu = leaseup.compute(deal, mix, n, exp, state["bond"])
@@ -217,40 +241,80 @@ def solve(deal: DealInputs) -> Result:
         waterfall=wf, valuation=val, iterations=iterations, converged=converged,
     )
 
-    # In screen mode the gap the bond and equity cannot cover is the subsidy
-    # the deal needs; a negative gap means the stack over-funds the budget.
+    # The subsidy the deal needs is whatever priced debt, equity and deferred
+    # fees cannot cover. A negative gap means the priced stack alone over-funds
+    # the budget and no subsidy is needed at all.
     gap = su.total_uses - (su.bonds + su.tax_credit_equity + su.deferred_fees)
+    committed = deal.committed_soft_money()
     result.required_soft_money = max(0.0, gap)
-    result.soft_money_surplus = max(0.0, -gap)
+    result.committed_soft_money = committed
+    result.additional_soft_money_needed = max(0.0, result.required_soft_money - committed)
+    result.soft_money_surplus = max(0.0, committed - result.required_soft_money)
     return result
 
 
-def _dscr_sized_loan(deal, mix, n, exp, su) -> float:
-    """Largest loan whose DSCR stays above the floor in every year, 2-17.
+def stabilised_noi(deal: DealInputs, mix):
+    """Operating expenses and NOI, with the property-tax loop resolved.
 
-    `Financing Assumptions` C36 sizes on year-2 NOI alone. That cannot hold:
-    revenue trends at 2% against expenses at 3%, so NOI erodes and a loan sized
-    to exactly the floor in year 2 breaches it within a few years. Sizing to the
-    binding year is what makes the DSCR gate meaningful.
+    Without a PILOT the tax is millage on a value capitalised from NOI, and NOI
+    is net of that tax, so the two have to settle against each other. With a
+    PILOT the tax is a fixed payment and this converges on the first pass.
     """
-    ceiling = financing.supportable_loan(deal, n.sizing_noi)
-    if ceiling <= 0:
-        return 0.0
+    noi_estimate = 0.0
+    exp = n = None
+    for _ in range(NOI_MAX_ITERATIONS):
+        exp = expenses.compute(deal, mix, noi_estimate)
+        n = noi.compute(deal, mix, exp)
+        if abs(n.noi - noi_estimate) < TOLERANCE:
+            break
+        noi_estimate = n.noi
+    return exp, n
+
+
+def _dscr_sized_loan(deal, mix, n, exp) -> float:
+    """Largest loan whose DSCR holds the floor in every year, 2-17.
+
+    `Financing Assumptions` C36 sizes on year-2 NOI alone, which is both too
+    little and too much: too little because years 2-3 are interest-only, so the
+    binding year is year 4 when amortisation starts; too much because NOI trends
+    and the floor has to hold in every year, not the first one.
+
+    Taking the largest loan that holds the floor is what minimises the subsidy
+    the deal needs - every dollar of debt the property can carry is a dollar of
+    soft funding it does not have to ask for. It also pulls the later years down
+    off the QAP's DSCR ceiling, which is the constraint that actually binds here:
+    NOI grows faster than level debt service, so DSCR rises over the term.
+    """
+    floor = deal.sizing_dscr
 
     def min_dscr(amount: float) -> float:
+        if amount <= 0:
+            return float("inf")
         lu = leaseup.compute(deal, mix, n, exp, amount)
         perm = loans.compute(deal, amount)
         pf = proforma.compute(deal, lu, n, perm)
         series = pf.dscr_years_2_17()
         return min(series) if series else 0.0
 
-    if min_dscr(ceiling) >= deal.sizing_dscr:
-        return ceiling
+    # Start from the workbook's year-2 sizing and bracket outward.
+    start = financing.supportable_loan(deal, n.sizing_noi)
+    if start <= 0:
+        return 0.0
 
-    low, high = 0.0, ceiling
-    for _ in range(60):
+    if min_dscr(start) < floor:
+        low, high = 0.0, start          # too much debt; search down
+    else:
+        low, high = start, start * 2    # room for more; search up
+        for _ in range(20):
+            if min_dscr(high) < floor:
+                break
+            low, high = high, high * 2
+        else:
+            return low
+
+    for _ in range(80):
         mid = (low + high) / 2
-        if min_dscr(mid) >= deal.sizing_dscr:
+        if min_dscr(mid) >= floor:
             low = mid
         else:
             high = mid
@@ -258,12 +322,17 @@ def _dscr_sized_loan(deal, mix, n, exp, su) -> float:
 
 
 def taxcredit_compute(deal, su, bond, equity, fin):
-    """`Tax Credit Calc`, whose basis starts from total *sources*."""
+    """`Tax Credit Calc`, whose basis starts from total development cost.
+
+    The workbook's F6 reads total *sources* (I26), which equals total uses once
+    the loop converges. Reading uses directly is the same number in workbook
+    mode and the correct one in screen mode, where soft money is still being
+    solved and the sources side has not yet closed.
+    """
     from .engine import taxcredit
-    total_sources = bond + equity + su.soft_money + su.deferred_fees
     return taxcredit.compute(
         deal,
-        total_sources=total_sources,
+        total_sources=su.total_uses,
         acquisition=su.acquisition,
         community_facilities=su.community_facilities,
         reserves=su.reserves,

@@ -140,7 +140,8 @@ def tdc_limit(deal: DealInputs, mix: UnitMix) -> tuple[float, float]:
 def compute(deal: DealInputs, mix: UnitMix, *, amounts: dict[str, float],
             annual_credit: float, reserves: float, operating_reserve: float,
             interest_reserve: float, capitalised_interest: float,
-            financing_fees: float, bonds: float, equity: float) -> SourcesUses:
+            financing_fees: float, bonds: float, equity: float,
+            soft_money: float | None = None) -> SourcesUses:
     su = SourcesUses()
     su.acquisition = deal.acquisition_cost
 
@@ -175,7 +176,9 @@ def compute(deal: DealInputs, mix: UnitMix, *, amounts: dict[str, float],
 
     su.bonds = bonds
     su.tax_credit_equity = equity
-    su.soft_money = deal.cdbg + deal.lhc_home
+    # In screen mode soft money is the residual the rest of the stack cannot
+    # cover - the subsidy the deal actually needs - rather than a fixed input.
+    su.soft_money = (deal.cdbg + deal.lhc_home) if soft_money is None else soft_money
     su.deferred_developer_fee = deal.deferred_fee_pct * su.developer_fee
     su.deferred_fees = deal.deferred_gc_fee + su.deferred_developer_fee
     su.total_sources = (su.bonds + su.tax_credit_equity + su.soft_money
