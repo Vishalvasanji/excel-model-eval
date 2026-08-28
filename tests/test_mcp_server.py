@@ -12,7 +12,7 @@ from urllib import error, request
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "mcp_server" / "api"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "api"))
 os.environ.setdefault("SCREEN_API_TOKEN", "test-token")
 
 import index as server  # noqa: E402

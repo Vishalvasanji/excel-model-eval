@@ -16,7 +16,7 @@ workbook recalculation, and needs neither Excel nor the workbook to run.
 |---|---|
 | `lihtc_screen/` | The engine. One module per workbook tab, each carrying the cell references it was ported from. |
 | `lihtc_screen/refdata/` | Market rent limits, utility allowances, HUD TDC limits, and the QAP rule register. |
-| `mcp_server/` | The remote MCP connector, deployed to Vercel. |
+| `api/index.py` | The remote MCP connector, deployed to Vercel (see `CONNECTOR.md`). |
 | `skills/lihtc-acq-rehab-screen/` | The Claude skill that reads a memo and calls the connector. |
 | `tools/` | Baseline extraction, the LibreOffice validation oracle, and the HUD limits loader. |
 | `tests/` | Workbook parity, scorecard, screen mode, reference data, connector, CLI. |
@@ -24,7 +24,7 @@ workbook recalculation, and needs neither Excel nor the workbook to run.
 
 ## Use it
 
-**From Claude** — deploy the connector (`mcp_server/README.md`), add it under
+**From Claude** — deploy the connector (`CONNECTOR.md`), add it under
 Settings → Connectors, and upload a memo. The skill does the rest.
 
 **From the command line**

@@ -7,7 +7,7 @@ against the same reference data.
 Auth is a shared bearer token from SCREEN_API_TOKEN, checked on every request.
 
 Local:
-    SCREEN_API_TOKEN=dev python mcp_server/api/index.py
+    SCREEN_API_TOKEN=dev python api/index.py
 """
 
 from __future__ import annotations
@@ -19,7 +19,9 @@ import traceback
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+# The engine lives beside this function at the project root; vercel.json ships
+# it via includeFiles.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lihtc_screen import defaults                       # noqa: E402
 from lihtc_screen.inputs import DealInputs              # noqa: E402

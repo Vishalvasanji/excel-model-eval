@@ -6,24 +6,22 @@ all run the same engine against the same reference data.
 
 ## Deploy
 
-From this directory:
+The function is `api/index.py` at the repository root, with `vercel.json`
+shipping `lihtc_screen/` alongside it via `includeFiles`.
+
+**Set the token first.** Without `SCREEN_API_TOKEN`, the server refuses every
+request rather than running open — a missing token is a closed door, not an
+absent lock — so a deployment made before the variable exists will 401 until it
+is set and redeployed.
 
 ```bash
+openssl rand -hex 32                          # generate a token
+npx vercel env add SCREEN_API_TOKEN production
 npx vercel deploy --prod
 ```
 
-The repository root is included in the deployment, since the function imports
-`lihtc_screen` from it.
-
-Set the shared token before the first request:
-
-```bash
-npx vercel env add SCREEN_API_TOKEN production
-```
-
-Use a long random value, e.g. `openssl rand -hex 32`. **Without
-`SCREEN_API_TOKEN` set, the server refuses every request** rather than running
-open — a missing token is treated as a closed door, not an absent lock.
+Store the token somewhere you can retrieve it: Vercel will not show it again,
+and it is what you paste into Claude when adding the connector.
 
 ## Add it to Claude
 
@@ -51,7 +49,7 @@ curl https://<your-deployment>/health
 ## Run it locally
 
 ```bash
-SCREEN_API_TOKEN=dev python mcp_server/api/index.py
+SCREEN_API_TOKEN=dev python api/index.py
 
 curl -s localhost:8000 -H 'Authorization: Bearer dev' \
   -H 'Content-Type: application/json' \

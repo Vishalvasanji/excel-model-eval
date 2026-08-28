@@ -1,0 +1,8 @@
+# Only the engine and the function need to ship.
+reference/
+tests/
+tools/
+skills/
+docs/
+*.xlsx
+*.docx
