@@ -82,6 +82,11 @@ class Result:
         return series.index(min(series)) + 2 if series else 0
 
     @property
+    def max_dscr_year(self) -> int:
+        series = self.proforma.dscr_years_2_17()
+        return series.index(max(series)) + 2 if series else 0
+
+    @property
     def cumulative_cash_year_15(self) -> float:
         return sum(self.proforma.cash_after_fees[1:15])
 
