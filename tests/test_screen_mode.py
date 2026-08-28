@@ -185,3 +185,80 @@ def test_sensitivity_tracks_equity_price():
     rows = sensitivity(westbend(), "equity_price", [0.75, 0.85, 0.95])
     gaps = [r["required_soft_money"] for r in rows]
     assert gaps == sorted(gaps, reverse=True), "richer equity should shrink the gap"
+
+
+# -- credit sizing ----------------------------------------------------------
+
+def _lightly_rehabbed() -> DealInputs:
+    """A cheap deal whose basis generates more credit than its gap can absorb."""
+    deal = westbend()
+    deal.acquisition_cost = 0
+    deal.building_basis_addition = 0
+    for line in deal.construction:
+        line.unit_cost = 60_000 if line.key == "units" else 0.0
+    return deal
+
+
+def test_credit_is_cut_to_the_gap_when_basis_over_generates():
+    result = solve(_lightly_rehabbed())
+    tc = result.tax_credit
+    assert tc.limited_by_gap
+    assert tc.annual_credit < tc.basis_annual_credit
+    # Cutting the allocation must not leave the stack unbalanced.
+    assert abs(result.sources_uses.balance) < 1.0
+
+
+def test_an_over_credited_deal_is_not_failed_for_it():
+    """Sizing the allocation down is a structuring outcome, not a no-go."""
+    card = evaluate(solve(_lightly_rehabbed()))
+    credit_max = next(c for c in card.checks if c.kpi_id == "ELG-CREDIT-MAX")
+    assert credit_max.status == "PASS", credit_max.message
+
+
+def test_credit_is_uncut_when_the_gap_is_wide():
+    result = solve(westbend())
+    tc = result.tax_credit
+    assert not tc.limited_by_gap
+    assert tc.annual_credit == pytest.approx(tc.basis_annual_credit)
+
+
+def test_equity_never_exceeds_what_the_deal_needs():
+    for price in (0, 1_000_000, 4_000_000, 10_000_000):
+        deal = westbend()
+        deal.acquisition_cost = price
+        r = solve(deal)
+        su = r.sources_uses
+        room = su.total_uses - su.bonds - su.deferred_fees
+        assert su.tax_credit_equity <= room + 1.0, f"over-equitied at ${price:,.0f}"
+
+
+# -- loan caps --------------------------------------------------------------
+
+def test_debt_never_exceeds_loan_to_cost():
+    """DSCR sizing alone is unbounded; a lender's advance is not."""
+    for rehab in (20_000, 40_000, 60_000, 100_000):
+        deal = westbend()
+        deal.acquisition_cost = 0
+        for line in deal.construction:
+            line.unit_cost = rehab if line.key == "units" else 0.0
+        r = solve(deal)
+        assert r.sources_uses.bonds <= deal.max_loan_to_cost * r.total_development_cost + 1.0, (
+            f"loan exceeds {deal.max_loan_to_cost:.0%} of cost at ${rehab:,}/unit rehab")
+
+
+def test_loan_to_value_binds_on_a_low_cost_deal():
+    deal = westbend()
+    deal.acquisition_cost = 0
+    for line in deal.construction:
+        line.unit_cost = 20_000 if line.key == "units" else 0.0
+    r = solve(deal)
+    value = r.noi.noi / deal.valuation_cap_rate
+    assert r.sources_uses.bonds <= deal.max_loan_to_value * value + 1.0
+
+
+def test_caps_can_be_lifted():
+    deal = westbend()
+    deal.max_loan_to_cost = 0
+    deal.max_loan_to_value = 0
+    capped = solve(westbend()).sources_uses.bonds
+    assert solve(deal).sources_uses.bonds >= capped

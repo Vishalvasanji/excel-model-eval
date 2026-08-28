@@ -242,6 +242,11 @@ class DealInputs:
     bridge_legal: float = 45_000                # D20
     bridge_servicing_setup: float = 10_000      # D21
     sizing_dscr: float = 1.15                   # C26
+    # Not in the workbook, which sizes on DSCR alone. Without a cap, a
+    # low-cost/high-NOI deal sizes to a loan larger than the project, which no
+    # lender would advance. Both caps are overridable per deal.
+    max_loan_to_cost: float = 0.90
+    max_loan_to_value: float = 0.90
     perm_coupon: float = 0.055                  # C28
     perm_amortization_years: int = 40           # C29
     issuer_fee_pct: float = 0.002               # C30

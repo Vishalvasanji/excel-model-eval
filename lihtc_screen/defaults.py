@@ -119,8 +119,12 @@ def apply(deal: DealInputs, *, state: str | None = None, parish: str | None = No
     # -- staffing ---------------------------------------------------------
     if "payroll" not in provided:
         deal.payroll = staffing(units)
+        plural = {"Property Manager": "property managers",
+                  "Leasing Agent": "leasing agents",
+                  "Maintenance Staff": "maintenance techs"}
         detail = ", ".join(
-            f"{int(p.count)} {p.title.lower()}{'s' if p.count != 1 else ''}"
+            f"{int(p.count)} "
+            + (plural[p.title] if p.count != 1 else p.title.lower())
             for p in deal.payroll)
         note("payroll", "Site staffing", detail,
              f"{units} units: 1 manager, plus a second maintenance tech at "

@@ -155,7 +155,7 @@ def solve(deal: DealInputs) -> Result:
             # The bond funds whatever the other sources do not, period by period.
             bond = state["bond"]
         else:
-            bond = sized_loan
+            bond = _cap_loan(deal, sized_loan, su.total_uses, n.noi)
 
         fin = financing.compute(deal, bond, n.sizing_noi)
 
@@ -184,13 +184,15 @@ def solve(deal: DealInputs) -> Result:
         # In screen mode the subsidy requirement is itself part of the loop:
         # it is whatever the priced stack cannot cover, and it feeds the basis.
         if deal.mode == "screen":
+            equity = _usable_equity(deal, su, bond, tc.equity)
             state["soft_money"] = max(
-                0.0, su.total_uses - bond - tc.equity - su.deferred_fees)
+                0.0, su.total_uses - bond - equity - su.deferred_fees)
 
         # -- feed back ---------------------------------------------------------
         state.update(
             bond=bond,
-            equity=tc.equity,
+            equity=_usable_equity(deal, su, bond, tc.equity)
+                   if deal.mode == "screen" else tc.equity,
             annual_credit=tc.annual_credit,
             operating_reserve=reserve_req.operating,
             interest_reserve=reserve_req.interest,
@@ -227,6 +229,13 @@ def solve(deal: DealInputs) -> Result:
         soft_money=su.soft_money,
     )
     tc = taxcredit_compute(deal, su, state["bond"], state["equity"], fin)
+    if deal.mode == "screen":
+        from .engine.taxcredit import limit_to_equity
+        limit_to_equity(tc, deal, _usable_equity(deal, su, state["bond"], tc.equity))
+        su.tax_credit_equity = tc.equity
+        su.total_sources = (su.bonds + su.tax_credit_equity + su.soft_money
+                            + su.deferred_fees)
+        su.balance = su.total_uses - su.total_sources
     lu = leaseup.compute(deal, mix, n, exp, state["bond"])
     perm = loans.compute(deal, state["bond"])
     pf = proforma.compute(deal, lu, n, perm)
@@ -251,6 +260,40 @@ def solve(deal: DealInputs) -> Result:
     result.additional_soft_money_needed = max(0.0, result.required_soft_money - committed)
     result.soft_money_surplus = max(0.0, committed - result.required_soft_money)
     return result
+
+
+def _cap_loan(deal: DealInputs, sized: float, total_cost: float,
+              noi: float) -> float:
+    """Hold the DSCR-sized loan to what a lender would actually advance.
+
+    DSCR sizing alone is unbounded above: a low-cost, high-NOI property sizes to
+    a loan larger than the project itself. Real permanent debt is also capped
+    against cost and against appraised value, so both caps apply.
+    """
+    caps = [sized]
+    if total_cost > 0 and deal.max_loan_to_cost:
+        caps.append(deal.max_loan_to_cost * total_cost)
+    if deal.max_loan_to_value and deal.valuation_cap_rate:
+        caps.append(deal.max_loan_to_value * noi / deal.valuation_cap_rate)
+    return max(0.0, min(caps))
+
+
+def _usable_equity(deal: DealInputs, su, bond: float, basis_equity: float) -> float:
+    """LIHTC equity, capped at what the deal's funding gap can absorb.
+
+    A state agency allocates the lesser of the credit the basis generates and
+    the credit the equity gap supports (`ELG-CREDIT-MAX`, QAP §II.B / §IV.D).
+    A cheap enough acquisition generates more credit than the deal needs, and
+    the allocation is sized down rather than the deal being over-funded.
+
+    The gap is measured after debt and deferred fees only. Soft money is not
+    netted off first: LIHTC equity is the cheaper capital, so a deal takes every
+    credit its basis supports and reduces the subsidy it asks for, rather than
+    drawing subsidy and forgoing credits. That also keeps what the deal needs a
+    property of the deal, independent of what happens to be committed to it.
+    """
+    room = su.total_uses - bond - su.deferred_fees
+    return max(0.0, min(basis_equity, room))
 
 
 def stabilised_noi(deal: DealInputs, mix):
