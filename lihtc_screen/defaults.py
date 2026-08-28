@@ -119,7 +119,9 @@ def apply(deal: DealInputs, *, state: str | None = None, parish: str | None = No
     # -- staffing ---------------------------------------------------------
     if "payroll" not in provided:
         deal.payroll = staffing(units)
-        detail = ", ".join(f"{int(p.count)} {p.title.lower()}" for p in deal.payroll)
+        detail = ", ".join(
+            f"{int(p.count)} {p.title.lower()}{'s' if p.count != 1 else ''}"
+            for p in deal.payroll)
         note("payroll", "Site staffing", detail,
              f"{units} units: 1 manager, plus a second maintenance tech at "
              f"{SECOND_MAINTENANCE_AT_UNITS} units and a second leasing agent at "
